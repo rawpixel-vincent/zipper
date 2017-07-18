@@ -17,10 +17,8 @@ var express = require('express'),
     env = require('./env.json'),
 
     app = express(),
-    maxReceiveCount = 10,
     debug = new Debug('zipper'),
     debugVerbose = new Debug('zipper:verbose'),
-    debugPooling = new Debug('zipper:pooling'),
     debugHttp = new Debug('zipper:http'),
     sqs = new Aws.SQS({
         params: {
@@ -52,9 +50,10 @@ function registerTimeTaken(files, size, duration) { // TODO: Implement multi lin
 }
 
 function processJob(job, callback) {
-    debug('Processing job %s for the %s attempt', job.id, job.receiveCount);
+    debug('Processing job %s for the %s attempt', job.id, job.tries);
 
     var filesSize = 0,
+        countCompleted = 0,
         temporaryDirectoryPath,
         compressedFilePath,
         compressedFileSize,
@@ -89,14 +88,6 @@ function processJob(job, callback) {
 
     job.destination.name = path.basename(job.destination.key);
 
-    function validateMaxReceiveCount(cb) {
-        if(job.receiveCount > maxReceiveCount) {
-            return cb(new Error('Max receive count exceeded'));
-        }
-
-        cb();
-    }
-
     function validateFile(header, cb) {
         var size = parseInt(header.ContentLength, 10);
         debugVerbose('File size is %s', prettyBytes(size));
@@ -117,7 +108,7 @@ function processJob(job, callback) {
                 Key: file.key
             }, function(err, header) {
                 if(err) {
-                    debug('Error obtaining file header');
+                    debug('Error obtaining file head');
                     return cb(err);
                 }
 
@@ -164,49 +155,16 @@ function processJob(job, callback) {
         });
     }
 
-    function zipFile(filePath, cb) {
-        debugVerbose('Zipping file %s', filePath);
-
-        var zip = childProcess.spawn('zip', [
-            job.destination.name,
-            filePath
-        ], {
-            cwd: temporaryDirectoryPath
-        });
-
-        zip.stdout.on('data', function(data) {
-            debugVerbose('zip stdout', data.toString().trim());
-        });
-
-        zip.stderr.on('data', function() {
-            debugVerbose('zip stderr', data.toString().trim());
-        });
-
-        zip.on('close', function(exitCode) {
-            if(exitCode !== 0) {
-                debug('Error creating compressed file! Zip exited with code %s', exitCode);
-                cb(new Error('Zip exited with code: ' + exitCode));
-            }
-
-            debugVerbose('File zipped!');
-            cb();
-        });
-    }
-
     function downloadFiles(cb) {
         debug('Downloading %s files', job.files.length);
-
         async.eachSeries(job.files, function(file, cb) {
             debugVerbose('Downloading file %s', file.fullKey);
-
             var fileDownload = s3client.getObject({
                 Bucket: file.bucket,
                 Key: file.key
             }).createReadStream();
 
-            var filePath = path.join(temporaryDirectoryPath, file.name),
-                writeStream = fs.createWriteStream(filePath);
-
+            var writeStream = fs.createWriteStream(path.join(temporaryDirectoryPath, file.name));
             fileDownload.pipe(writeStream);
 
             var bytesReceived = 0;
@@ -216,17 +174,16 @@ function processJob(job, callback) {
             });
 
             fileDownload.on('end', function() {
+                countCompleted += 1;
+                sendProgressNotifications();
                 debugVerbose('Download completed');
-                zipFile(filePath, cb);
-                // cb();
+                cb();
             });
         }, function(err) {
             if(err) {
                 debug('Error downloading files');
                 return cb(err);
             }
-
-            compressedFilePath = path.join(temporaryDirectoryPath, job.destination.name);
 
             debug('All downloads completed');
             cb();
@@ -290,7 +247,6 @@ function processJob(job, callback) {
                 Bucket: job.destination.bucket,
                 Key: job.destination.key,
                 ACL: job.acl || 'private',
-                StorageClass: job.storageClass || 'STANDARD',
                 Body: fs.createReadStream(compressedFilePath)
             });
 
@@ -336,6 +292,20 @@ function processJob(job, callback) {
         }, cb);
     }
 
+
+    function sendProgressNotifications() {
+        var notificationStrategy = notificationTypes['http'];
+
+        notificationStrategy({
+            job: job,
+            notification: job.notifications[0],
+            results: {
+                count: countCompleted,
+                status: 'progress'
+            }
+        }, cb);
+    }
+
     function deleteJob(cb) {
         debug('Deleting job');
 
@@ -365,12 +335,11 @@ function processJob(job, callback) {
 
     var startTime = new Date();
     async.series([
-        validateMaxReceiveCount,
         getHeaders,
         requestVisibilityTimeoutExtensionIfNeeded,
         createTemporaryDirectory,
         downloadFiles,
-        // createCompressedFile,
+        createCompressedFile,
         getCompressedFileSize,
         uploadCompressedFile,
         sendNotifications,
@@ -399,7 +368,7 @@ function getJobBatch() {
         maxNumberOfMessages = 1,
         concurrentJobs = 1;
 
-    debugPooling('Long pooling for jobs. Timeout: %s seconds', longPoolingPeriod);
+    debug('Long pooling for jobs. Timeout: %s seconds', longPoolingPeriod);
 
     sqs.receiveMessage({
         AttributeNames: [
@@ -410,12 +379,12 @@ function getJobBatch() {
         WaitTimeSeconds: longPoolingPeriod
     }, function(err, data) {
         if(err) {
-            debugPooling('Error receiving messages');
+            debug('Error receiving messages');
             throw err;
         }
 
         if(!data.Messages || !data.Messages.length) {
-            debugPooling('No jobs found');
+            debug('No jobs found');
             return setImmediate(getJobBatch);
         }
 
@@ -424,70 +393,52 @@ function getJobBatch() {
 
             job.id = message.MessageId;
             job.receipt = message.ReceiptHandle;
-            job.receiveCount = parseFloat(message.Attributes.ApproximateReceiveCount);
+            job.tries = message.Attributes.ApproximateReceiveCount;
 
             return job;
         });
 
-        debugPooling('Received %s jobs', messages.length);
+        debug('Received %s jobs', messages.length);
         async.eachLimit(messages, concurrentJobs, processJob, function(err) {
             setImmediate(getJobBatch);
         });
     });
 }
 
-sqs.getQueueAttributes({
-    AttributeNames: [
-        'MaximumMessageSize',
-        'RedrivePolicy'
-    ]
-}, function(err, queueAttributes) {
-    if(err) {
-        throw err;
+app.use(bodyParser.json({
+    limit: '256kb'
+}));
+
+app.post('/', function(req, res, next) {
+    var job = req.body;
+
+    if(!job.credentials || !job.credentials.accessKeyId || !job.credentials.secretAccessKey || !job.credentials.region) {
+        return next(new Error('Credentials missing'));
     }
 
-    if(queueAttributes.Attributes.RedrivePolicy) {
-        var redrivePolicy = JSON.parse(queueAttributes.Attributes.RedrivePolicy);
-        maxReceiveCount = parseFloat(redrivePolicy.maxReceiveCount);
+    if(!job.files || !job.files.length) {
+        return next(new Error('Files array is missing'));
     }
 
-    var maximumMessageSize = parseFloat(queueAttributes.Attributes.MaximumMessageSize) || '256kb';
+    if(!job.destination) {
+        return next(new Error('Destination key missing'));
+    }
 
-    app.use(bodyParser.json({
-        limit: maximumMessageSize
-    }));
-
-    app.post('/', function(req, res, next) {
-        var job = req.body;
-
-        if(!job.credentials || !job.credentials.accessKeyId || !job.credentials.secretAccessKey || !job.credentials.region) {
-            return next(new Error('Credentials missing'));
+    debugHttp('Job received, sending to queue');
+    sqs.sendMessage({
+        MessageBody: JSON.stringify(job)
+    }, function(err, data) {
+        if(err) {
+            debugHttp('Error sending job to queue');
+            return next(err);
         }
 
-        if(!job.files || !job.files.length) {
-            return next(new Error('Files array is missing'));
-        }
-
-        if(!job.destination) {
-            return next(new Error('Destination key missing'));
-        }
-
-        debugHttp('Job received, sending to queue');
-        sqs.sendMessage({
-            MessageBody: JSON.stringify(job)
-        }, function(err, data) {
-            if(err) {
-                debugHttp('Error sending job to queue');
-                return next(err);
-            }
-
-            debugHttp('Job sent to queue: %s', data.MessageId);
-            res.status(202).json({
-                id: data.MessageId
-            });
+        debugHttp('Job sent to queue: %s', data.MessageId);
+        res.status(202).json({
+            id: data.MessageId
         });
     });
-
-    app.listen(process.env.HTTP_PORT || 9999);
-    getJobBatch();
 });
+
+app.listen(process.env.HTTP_PORT || 9999);
+getJobBatch();
