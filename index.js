@@ -303,7 +303,7 @@ function processJob(job, callback) {
                 count: countCompleted,
                 status: 'progress'
             }
-        }, cb);
+        }, function() {});
     }
 
     function deleteJob(cb) {
