@@ -194,7 +194,7 @@ function processJob(job, callback) {
         debug('Creating compressed file');
 
         var zip = childProcess.spawn('zip', [
-            '-r',
+            '-r -1',
             job.destination.name,
             './'
         ], {
