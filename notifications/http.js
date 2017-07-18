@@ -12,15 +12,13 @@ module.exports = function httpNotification(options, callback) {
 
     debug('Sending HTTP notification to "%s %s"', notification.method.toUpperCase(), notification.url);
 
+    json = results;
+    json.id = job.id;
+
     request({
         method: notification.method,
         url: notification.url.replace(/{:id}/g, job.id),
-        json: {
-            id: job.id,
-            status: results.status,
-            location: results.location,
-            size: results.size
-        }
+        json: json
     }, function(err, res, body) {
         if(err) {
             debug('Error sending HTTP notification');
