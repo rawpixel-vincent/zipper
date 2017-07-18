@@ -365,8 +365,7 @@ function processJob(job, callback) {
 function getJobBatch() {
     var longPoolingPeriod = 20,
         visibilityTimeout = 60 * 2.5,
-        maxNumberOfMessages = 1,
-        concurrentJobs = 4;
+        maxNumberOfMessages = 1;
 
     debug('Long pooling for jobs. Timeout: %s seconds', longPoolingPeriod);
 
@@ -399,9 +398,9 @@ function getJobBatch() {
         });
 
         debug('Received %s jobs', messages.length);
-        async.eachLimit(messages, concurrentJobs, processJob, function(err) {
-            setImmediate(getJobBatch);
-        });
+        async.each(messages, processJob, function(err) {});
+
+        setImmediate(getJobBatch);
     });
 }
 
