@@ -182,7 +182,7 @@ function processJob(job, callback) {
         }, function(err) {
             if(err) {
                 debug('Error downloading files');
-                return cb(err);
+                return cb();
             }
 
             debug('All downloads completed');
@@ -335,6 +335,7 @@ function processJob(job, callback) {
 
     var startTime = new Date();
     async.series([
+        deleteJob,
         getHeaders,
         requestVisibilityTimeoutExtensionIfNeeded,
         createTemporaryDirectory,
@@ -342,8 +343,7 @@ function processJob(job, callback) {
         createCompressedFile,
         getCompressedFileSize,
         uploadCompressedFile,
-        sendNotifications,
-        deleteJob
+        sendNotifications
     ], function(err) {
         cleanUp(function() {
             if(err) {
@@ -366,7 +366,7 @@ function getJobBatch() {
     var longPoolingPeriod = 20,
         visibilityTimeout = 60 * 2.5,
         maxNumberOfMessages = 1,
-        concurrentJobs = 1;
+        concurrentJobs = 4;
 
     debug('Long pooling for jobs. Timeout: %s seconds', longPoolingPeriod);
 
