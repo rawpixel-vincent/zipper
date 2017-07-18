@@ -210,14 +210,14 @@ function processJob(job, callback) {
         });
 
         zip.on('close', function(exitCode) {
-            if(exitCode !== 0) {
+            if (exitCode !== 0) {
                 debug('Error creating compressed file! Zip exited with code %s', exitCode);
                 cb(new Error('Zip exited with code: ' + exitCode));
+            } else {
+                compressedFilePath = path.join(temporaryDirectoryPath, job.destination.name);
+                debug('Compressed file created');
+                cb();
             }
-
-            compressedFilePath = path.join(temporaryDirectoryPath, job.destination.name);
-            debug('Compressed file created');
-            cb();
         });
     }
 
