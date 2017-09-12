@@ -67,15 +67,15 @@ function processJob(job, callback) {
         secretAccessKey: job.credentials.secretAccessKey
     });
 
-    job.files = job.files.map(function(key) {
-        var key = key.split('/'),
+    job.files = job.files.map(function(fileInfo) {
+        var key = fileInfo.key.split('/'),
             file = {
-                fullKey: key.join('/'),
-                bucket: key.shift(),
-                key: key.join('/')
+                fullKey: fileInfo.key.join('/'),
+                bucket: fileInfo.key.shift(),
+                key: fileInfo.key.join('/')
             };
 
-        file.name = path.basename(file.key);
+        file.name = file.name;
         return file;
     });
 
