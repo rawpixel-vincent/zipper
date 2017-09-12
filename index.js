@@ -71,12 +71,12 @@ function processJob(job, callback) {
         console.log(fileInfo);
         var key = fileInfo.key.split('/'),
             file = {
-                fullKey: fileInfo.key.join('/'),
-                bucket: fileInfo.key.shift(),
-                key: fileInfo.key.join('/')
+                fullKey: key.join('/'),
+                bucket: key.shift(),
+                key: key.join('/')
             };
 
-        file.name = file.name;
+        file.name = fileInfo.name;
         return file;
     });
 
