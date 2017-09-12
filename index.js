@@ -68,6 +68,7 @@ function processJob(job, callback) {
     });
 
     job.files = job.files.map(function(fileInfo) {
+        console.log(fileInfo);
         var key = fileInfo.key.split('/'),
             file = {
                 fullKey: fileInfo.key.join('/'),
