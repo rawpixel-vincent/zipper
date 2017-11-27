@@ -439,5 +439,11 @@ app.post('/', function(req, res, next) {
     });
 });
 
+app.get('/', function(req, res, next) {
+    res.json({
+    status: 'ok',
+    });
+});
+
 app.listen(9000);
 getJobBatch();
