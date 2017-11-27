@@ -16,7 +16,7 @@ module.exports = function httpNotification(options, callback) {
 
     request({
         method: notification.method,
-        url: notification.url.replace(/{:id}/g, job.id),
+        url: notification.url.replace(/{:id}/g, job.id) + '&_format=json',
         json: results
     }, function(err, res, body) {
         if(err) {
