@@ -439,5 +439,5 @@ app.post('/', function(req, res, next) {
     });
 });
 
-app.listen(process.env.HTTP_PORT || 9999);
+app.listen(80);
 getJobBatch();

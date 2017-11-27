@@ -8,6 +8,12 @@ Zipper is a HTTP rest API that will allow you to compress files from your Amazon
 
 You can also configure notification hooks to know when your file is ready.
 
+## Rawpixel usage
+
+1. see logs `pm2 logs`
+2. start process `pm2 start index.js -n "zipper"`
+3. stop process `pm2 stop all`
+
 ### Pre-requirements
 
 1. A queue at Amazon SQS service so its easier to scale up.
