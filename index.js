@@ -51,7 +51,7 @@ function processJob(job, callback) {
         secretAccessKey: job.credentials.secretAccessKey
     });
 
-    job.files = [];
+    var filesProcessed = [];
     job.files.forEach(function(fileInfo) {
         var key = fileInfo.key.split('/');
         console.log(key);
@@ -67,8 +67,9 @@ function processJob(job, callback) {
         };
 
         file.name = fileInfo.name;
-        job.files.push(file);
+        filesProcessed.push(file);
     });
+    job.files = filesProcessed;
 
     job.failedFiles = [];
 
