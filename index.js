@@ -79,6 +79,8 @@ function processJob(job, callback) {
         return file;
     });
 
+    job.failedFiles = [];
+
     job.destination = job.destination.split('/');
     job.destination = {
         fullKey: job.destination.join('/'),
@@ -157,35 +159,62 @@ function processJob(job, callback) {
 
     function downloadFiles(cb) {
         debug('Downloading %s files', job.files.length);
-        async.eachSeries(job.files, function(file, cb) {
-            debugVerbose('Downloading file %s', file.fullKey);
-            var fileDownload = s3client.getObject({
-                Bucket: file.bucket,
-                Key: file.key
-            }).createReadStream();
-
-            var writeStream = fs.createWriteStream(path.join(temporaryDirectoryPath, file.name));
-            fileDownload.pipe(writeStream);
-
-            var bytesReceived = 0;
-            fileDownload.on('data', function(chunk) {
-                bytesReceived += chunk.length;
-                debugVerbose('Received %s', prettyBytes(bytesReceived));
-            });
-
-            fileDownload.on('end', function() {
-                countCompleted += 1;
-                sendProgressNotifications();
-                debugVerbose('Download completed');
-                cb();
-            });
-        }, function(err) {
+        async.eachSeries(job.files, downloadFileWorker, function(err) {
             if(err) {
                 debug('Error downloading files');
                 return cb();
             }
-
             debug('All downloads completed');
+            cb();
+        });
+    }
+
+    function retryFailedFiles(cb) {
+        if (!job.failedFiles.length) {
+            cb();
+            return;
+        }
+        debug('Retry downloading failed %s files', job.failedFiles.length);
+        async.eachSeries(job.failedFiles, downloadFileWorker, function(err) {
+            if(err) {
+                debug('Error retrying downloading failed files');
+                return cb();
+            }
+            debug('All retried downloads completed');
+            cb();
+        });
+    }
+
+    function downloadFileWorker(file, cb) {
+        debugVerbose('Downloading file %s', file.fullKey);
+        var fileDownload = s3client.getObject({
+            Bucket: file.bucket,
+            Key: file.key
+        }).createReadStream();
+
+        fileDownload.on('error', function(error) {
+            console.log(error);
+            if (!file.retry) {
+                file.retry = true;
+                job.failedFiles.push(file);
+            }
+        });
+
+        var writeStream = fs.createWriteStream(path.join(temporaryDirectoryPath, file.name));
+        fileDownload.pipe(writeStream);
+
+        var bytesReceived = 0;
+        fileDownload.on('data', function(chunk) {
+            bytesReceived += chunk.length;
+            debugVerbose('Received %s', prettyBytes(bytesReceived));
+        });
+
+        fileDownload.on('end', function() {
+            if (!file.retry) {
+                countCompleted += 1;
+                sendProgressNotifications();
+            }
+            debugVerbose('Download completed');
             cb();
         });
     }
@@ -340,6 +369,7 @@ function processJob(job, callback) {
         requestVisibilityTimeoutExtensionIfNeeded,
         createTemporaryDirectory,
         downloadFiles,
+        retryFailedFiles,
         createCompressedFile,
         getCompressedFileSize,
         uploadCompressedFile,
