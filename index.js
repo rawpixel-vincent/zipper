@@ -67,16 +67,22 @@ function processJob(job, callback) {
         secretAccessKey: job.credentials.secretAccessKey
     });
 
-    job.files = job.files.map(function(fileInfo) {
-        var key = fileInfo.key.split('/'),
-            file = {
-                fullKey: key.join('/'),
-                bucket: key.shift(),
-                key: key.join('/')
-            };
+    job.files = [];
+    job.files.forEach(function(fileInfo) {
+        var key = fileInfo.key.split('/');
+        if (!key.length) {
+            console.log("invalid key in job");
+            console.log(fileInfo);
+            return;
+        }
+        var file = {
+            fullKey: key.join('/'),
+            bucket: key.shift(),
+            key: key.join('/')
+        };
 
         file.name = fileInfo.name;
-        return file;
+        job.files.push(file);
     });
 
     job.failedFiles = [];
@@ -92,9 +98,6 @@ function processJob(job, callback) {
 
     function validateFile(header, cb) {
         var size = parseInt(header.ContentLength, 10);
-        debugVerbose('File size is %s', prettyBytes(size));
-        // TODO: Add max file size validation
-
         filesSize += size;
         cb();
     }
@@ -301,7 +304,7 @@ function processJob(job, callback) {
             var notificationType = notification.type.toLowerCase(),
                 notificationStrategy = notificationTypes[notificationType];
 
-            if(!notificationStrategy) {
+            if (!notificationStrategy) {
                 debug('Unkown notification type "%s"', notificationType);
                 return cb();
             }
