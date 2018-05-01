@@ -260,10 +260,7 @@ function processJob(job, callback) {
             }
 
             compressedFileSize = stats.size;
-            var compressionEfficiency = ((1 - compressedFileSize/filesSize) * 100).toFixed(2);
-
             debug('Compressed file size is %s', prettyBytes(compressedFileSize));
-            debug('Original file was compressed by %s%', compressionEfficiency);
 
             cb();
         });
