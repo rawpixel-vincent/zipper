@@ -34,26 +34,10 @@ function formatTime(miliseconds) {
     return (miliseconds / 1000).toFixed(2) + ' seconds';
 }
 
-function getTimePrediction(files, size) { // TODO: Implement multi linear regression
-    return null;
-    // return regression.hypothesize([
-    //     files,
-    //     size
-    // ]);
-}
-
-function registerTimeTaken(files, size, duration) { // TODO: Implement multi linear regression
-    // regression.addObservation([
-    //     files,
-    //     size
-    // ], duration);
-}
-
 function processJob(job, callback) {
     debug('Processing job %s for the %s attempt', job.id, job.tries);
 
-    var filesSize = 0,
-        countCompleted = 0,
+    var countCompleted = 0,
         temporaryDirectoryPath,
         compressedFilePath,
         compressedFileSize,
@@ -95,53 +79,6 @@ function processJob(job, callback) {
     }
 
     job.destination.name = path.basename(job.destination.key);
-
-    function validateFile(header, cb) {
-        var size = parseInt(header.ContentLength, 10);
-        filesSize += size;
-        cb();
-    }
-
-    function getHeaders(cb) {
-        debug('Downloading files headers');
-
-        async.eachSeries(job.files, function(file, cb) {
-            debugVerbose('Downloading headers from %s', file.fullKey);
-
-            s3client.headObject({
-                Bucket: file.bucket,
-                Key: file.key
-            }, function(err, header) {
-                if(err) {
-                    debug('Error obtaining file head');
-                    return cb(err);
-                }
-
-                validateFile(header, cb);
-            });
-        }, function(err) {
-            if(err) {
-                debug('Error downloading headers');
-                return cb(err);
-            }
-
-            // TODO: Add max total size validation
-            debug('Total size to compress is %s', prettyBytes(filesSize));
-            cb();
-        });
-    }
-
-    function requestVisibilityTimeoutExtensionIfNeeded(cb) {
-        var approximateJobDuration = getTimePrediction(job.files.length, filesSize);
-
-        if(!approximateJobDuration) {
-            debug('Not enough data to predict job duration');
-            return cb();
-        }
-
-        debug('This job is expected to take %s', formatTime(approximateJobDuration));
-        cb();
-    }
 
     function createTemporaryDirectory(cb) {
         debug('Creating temporary directory');
@@ -366,8 +303,6 @@ function processJob(job, callback) {
     var startTime = new Date();
     async.series([
         deleteJob,
-        getHeaders,
-        requestVisibilityTimeoutExtensionIfNeeded,
         createTemporaryDirectory,
         downloadFiles,
         retryFailedFiles,
@@ -386,7 +321,6 @@ function processJob(job, callback) {
 
             var jobTime = new Date() - startTime;
             debug('Job completed in %s', formatTime(jobTime));
-            registerTimeTaken(job.files.length, filesSize, jobTime);
 
             callback();
         });
