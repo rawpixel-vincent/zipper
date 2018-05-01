@@ -41,7 +41,9 @@ function processJob(job, callback) {
         temporaryDirectoryPath,
         compressedFilePath,
         compressedFileSize,
-        uploadedFileLocation;
+        uploadedFileLocation,
+        timeStartToZip = 0,
+        timeStartToUploadZip = 0;
 
     var s3client = new Aws.S3({
         endpoint: 'https://s3-' + job.credentials.region + '.amazonaws.com',
@@ -163,7 +165,7 @@ function processJob(job, callback) {
 
     function createCompressedFile(cb) {
         debug('Creating compressed file');
-
+        timeStartToZip = Math.round(new Date().getTime()/1000);
         var zip = childProcess.spawn('zip', [
             '-r0',
             job.destination.name,
@@ -187,6 +189,8 @@ function processJob(job, callback) {
             } else {
                 compressedFilePath = path.join(temporaryDirectoryPath, job.destination.name);
                 debug('Compressed file created');
+                var time = Math.round(new Date().getTime()/1000) - timeStartToZip;
+                console.log('file compressed in ' + time + ' seconds');
                 cb();
             }
         });
@@ -202,7 +206,7 @@ function processJob(job, callback) {
             }
 
             compressedFileSize = stats.size;
-            debug('Compressed file size is %s', prettyBytes(compressedFileSize));
+            console.log('Compressed file size is %s', prettyBytes(compressedFileSize));
 
             cb();
         });
@@ -210,7 +214,7 @@ function processJob(job, callback) {
 
     function uploadCompressedFile(cb) {
         debug('Uploading compressed file to %s', job.destination.fullKey);
-
+        timeStartToUploadZip = Math.round(new Date().getTime()/1000);
         var upload = s3client.upload({
                 Bucket: job.destination.bucket,
                 Key: job.destination.key,
@@ -225,6 +229,8 @@ function processJob(job, callback) {
                 return cb(err);
             }
 
+            var time = Math.round(new Date().getTime()/1000) - timeStartToUploadZip;
+            console.log('file compressed in ' + time + ' seconds');
             uploadedFileLocation = data.Location;
             debugVerbose('File available at %s', uploadedFileLocation);
 
