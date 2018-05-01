@@ -197,6 +197,7 @@ function processJob(job, callback) {
 
         fileDownload.on('error', function(error) {
             console.log(error);
+            console.log(file);
             if (!file.retry) {
                 file.retry = true;
                 job.failedFiles.push(file);
