@@ -331,7 +331,7 @@ function processJob(job, callback) {
 
 function getJobBatch() {
     var longPoolingPeriod = 2,
-        visibilityTimeout = 1200,
+        visibilityTimeout = 2400,
         maxNumberOfMessages = 1;
 
     debug('Long pooling for jobs. Timeout: %s seconds', longPoolingPeriod);
