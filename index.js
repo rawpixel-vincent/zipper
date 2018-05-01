@@ -54,6 +54,7 @@ function processJob(job, callback) {
     job.files = [];
     job.files.forEach(function(fileInfo) {
         var key = fileInfo.key.split('/');
+        console.log(key);
         if (!key.length) {
             console.log("invalid key in job");
             console.log(fileInfo);
